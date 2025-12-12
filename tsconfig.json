@@ -4,7 +4,7 @@
     "module": "commonjs",
     "lib": ["ES2022"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    // ❌ REMOVE THIS LINE: "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,8 +12,17 @@
     "resolveJsonModule": true,
     "moduleResolution": "node",
     "declaration": true,
-    "sourceMap": true
+    "sourceMap": true,
+    
+    // Path mapping for local PerpSdk
+    "baseUrl": ".",
+    "paths": {
+      "@perpsdk/*": ["../PerpSdk/src/*"]
+    }
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/**/*",
+    "../PerpSdk/src/**/*"
+  ],
   "exclude": ["node_modules", "dist"]
 }
