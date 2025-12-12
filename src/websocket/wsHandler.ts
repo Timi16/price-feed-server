@@ -1,9 +1,14 @@
-import WebSocket from 'ws';
-import { z } from 'zod';
-import { ClientMessageSchema, ClientState, ErrorMessage, PriceData } from '../types';
-import { logger } from '../utils/logger';
-import { pairService } from '../services/pairService';
-import { priceFeedService } from '../services/feedClient';
+import WebSocket from "ws";
+import { z } from "zod";
+import {
+  ClientMessageSchema,
+  ClientState,
+  ErrorMessage,
+  PriceData,
+} from "../types";
+import { logger } from "../utils/logger";
+import { pairService } from "../services/pairService";
+import { priceFeedService } from "../services/feedClient";
 
 /**
  * Handle incoming WebSocket messages from clients
@@ -28,23 +33,23 @@ export class WebSocketHandler {
 
     // Send welcome message
     this.sendMessage(ws, {
-      type: 'connected',
-      message: 'Connected to Debonk Price Feed Server',
+      type: "connected",
+      message: "Connected to Debonk Price Feed Server",
       supportedPairs: pairService.getAllPairs(),
       timestamp: Date.now(),
     });
 
     // Handle messages
-    ws.on('message', (data: WebSocket.Data) => {
+    ws.on("message", (data: WebSocket.Data) => {
       this.handleMessage(ws, data, clientState);
     });
 
     // Handle disconnect
-    ws.on('close', () => {
+    ws.on("close", () => {
       this.handleDisconnect(ws, clientState);
     });
 
-    ws.on('error', (error) => {
+    ws.on("error", (error) => {
       logger.error(`WebSocket error for client ${clientId}:`, error);
     });
   }
@@ -52,35 +57,44 @@ export class WebSocketHandler {
   /**
    * Handle incoming message from client
    */
-  private handleMessage(ws: WebSocket, data: WebSocket.Data, clientState: ClientState): void {
+  private handleMessage(
+    ws: WebSocket,
+    data: WebSocket.Data,
+    clientState: ClientState
+  ): void {
     try {
       const message = JSON.parse(data.toString());
 
       // Validate message
       const validatedMessage = ClientMessageSchema.parse(message);
 
+      // ✅ FIXED: Use .pair directly (not .data.pair)
       switch (validatedMessage.type) {
-        case 'subscribe':
+        case "subscribe":
           this.handleSubscribe(ws, validatedMessage.pair, clientState);
           break;
 
-        case 'unsubscribe':
+        case "unsubscribe":
           this.handleUnsubscribe(ws, validatedMessage.pair, clientState);
           break;
 
-        case 'get_price':
+        case "get_price":
           this.handleGetPrice(ws, validatedMessage.pair);
           break;
 
         default:
-          this.sendError(ws, 'Unknown message type', 'UNKNOWN_MESSAGE_TYPE');
+          this.sendError(ws, "Unknown message type", "UNKNOWN_MESSAGE_TYPE");
       }
     } catch (error) {
       if (error instanceof z.ZodError) {
-        this.sendError(ws, `Invalid message format: ${error.message}`, 'INVALID_MESSAGE');
+        this.sendError(
+          ws,
+          `Invalid message format: ${error.message}`,
+          "INVALID_MESSAGE"
+        );
       } else {
-        logger.error('Error handling message:', error);
-        this.sendError(ws, 'Internal server error', 'INTERNAL_ERROR');
+        logger.error("Error handling message:", error);
+        this.sendError(ws, "Internal server error", "INTERNAL_ERROR");
       }
     }
   }
@@ -88,11 +102,15 @@ export class WebSocketHandler {
   /**
    * Handle subscribe request
    */
-  private async handleSubscribe(ws: WebSocket, pair: string, clientState: ClientState): Promise<void> {
+  private async handleSubscribe(
+    ws: WebSocket,
+    pair: string,
+    clientState: ClientState
+  ): Promise<void> {
     try {
       // Validate pair is supported
       if (!pairService.isPairSupported(pair)) {
-        this.sendError(ws, `Unsupported pair: ${pair}`, 'UNSUPPORTED_PAIR');
+        this.sendError(ws, `Unsupported pair: ${pair}`, "UNSUPPORTED_PAIR");
         return;
       }
 
@@ -103,15 +121,18 @@ export class WebSocketHandler {
       }
 
       // Subscribe to price updates
-      const unsubscribe = priceFeedService.subscribeToPair(pair, (priceData: PriceData) => {
-        // Broadcast to this client
-        this.sendMessage(ws, {
-          type: 'price_update',
-          pair,
-          data: priceData,
-          timestamp: Date.now(),
-        });
-      });
+      const unsubscribe = priceFeedService.subscribeToPair(
+        pair,
+        (priceData: PriceData) => {
+          // Broadcast to this client
+          this.sendMessage(ws, {
+            type: "price_update",
+            pair,
+            data: priceData,
+            timestamp: Date.now(),
+          });
+        }
+      );
 
       // Store unsubscribe function
       const key = `${clientState.id}:${pair}`;
@@ -122,7 +143,7 @@ export class WebSocketHandler {
 
       // Send confirmation
       this.sendMessage(ws, {
-        type: 'subscribed',
+        type: "subscribed",
         pair,
         timestamp: Date.now(),
       });
@@ -130,14 +151,22 @@ export class WebSocketHandler {
       logger.info(`Client ${clientState.id} subscribed to ${pair}`);
     } catch (error) {
       logger.error(`Error subscribing to ${pair}:`, error);
-      this.sendError(ws, `Failed to subscribe to ${pair}`, 'SUBSCRIPTION_FAILED');
+      this.sendError(
+        ws,
+        `Failed to subscribe to ${pair}`,
+        "SUBSCRIPTION_FAILED"
+      );
     }
   }
 
   /**
    * Handle unsubscribe request
    */
-  private handleUnsubscribe(ws: WebSocket, pair: string, clientState: ClientState): void {
+  private handleUnsubscribe(
+    ws: WebSocket,
+    pair: string,
+    clientState: ClientState
+  ): void {
     if (!clientState.subscribedPairs.has(pair)) {
       logger.debug(`Client ${clientState.id} not subscribed to ${pair}`);
       return;
@@ -156,7 +185,7 @@ export class WebSocketHandler {
 
     // Send confirmation
     this.sendMessage(ws, {
-      type: 'unsubscribed',
+      type: "unsubscribed",
       pair,
       timestamp: Date.now(),
     });
@@ -170,21 +199,25 @@ export class WebSocketHandler {
   private async handleGetPrice(ws: WebSocket, pair: string): Promise<void> {
     try {
       if (!pairService.isPairSupported(pair)) {
-        this.sendError(ws, `Unsupported pair: ${pair}`, 'UNSUPPORTED_PAIR');
+        this.sendError(ws, `Unsupported pair: ${pair}`, "UNSUPPORTED_PAIR");
         return;
       }
 
       const priceData = await priceFeedService.getCurrentPrice(pair);
 
       this.sendMessage(ws, {
-        type: 'price_update',
+        type: "price_update",
         pair,
         data: priceData,
         timestamp: Date.now(),
       });
     } catch (error) {
       logger.error(`Error fetching price for ${pair}:`, error);
-      this.sendError(ws, `Failed to fetch price for ${pair}`, 'PRICE_FETCH_FAILED');
+      this.sendError(
+        ws,
+        `Failed to fetch price for ${pair}`,
+        "PRICE_FETCH_FAILED"
+      );
     }
   }
 
@@ -203,7 +236,9 @@ export class WebSocketHandler {
     });
 
     this.clients.delete(ws);
-    logger.info(`Client ${clientState.id} disconnected (total: ${this.clients.size})`);
+    logger.info(
+      `Client ${clientState.id} disconnected (total: ${this.clients.size})`
+    );
   }
 
   /**
@@ -220,7 +255,7 @@ export class WebSocketHandler {
    */
   private sendError(ws: WebSocket, message: string, code?: string): void {
     const errorMessage: ErrorMessage = {
-      type: 'error',
+      type: "error",
       message,
       code,
       timestamp: Date.now(),
