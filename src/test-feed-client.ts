@@ -1,85 +1,73 @@
 /**
- * Direct test of FeedClient to verify it's working
- * Run: npx tsx test-feed-client.ts
+ * WebSocket Debug Test - Direct Pyth Connection
+ * This will show us EXACTLY what Pyth is sending
+ * Run: npx tsx ws-debug-test.ts
  */
 
-import { FeedClient } from '@perpsdk/feed/feed_client';
-import { TraderClient } from '@perpsdk/client';
+import WebSocket from 'ws';
 
-const PYTH_WS_URL = 'wss://hermes.pyth.network/ws';  // ← CHANGE https → wss
-const BASE_RPC_URL = 'https://base.meowrpc.com';
+const PYTH_WS_URL = 'wss://hermes.pyth.network/ws';
+const BTC_FEED_ID = '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43';
 
-async function testFeedClient() {
-  console.log('🧪 Testing FeedClient directly...\n');
+console.log('🔍 Direct Pyth WebSocket Debug Test\n');
+console.log(`Feed ID: ${BTC_FEED_ID}`);
+console.log(`Lowercase: ${BTC_FEED_ID.toLowerCase()}\n`);
 
-  try {
-    // Get BTC feed ID
-    console.log('1️⃣ Getting BTC/USD feed ID...');
-    const traderClient = new TraderClient(BASE_RPC_URL);
-    const allPairs = await traderClient.pairsCache.getPairsInfo();
-    
-    let btcFeedId: string | null = null;
-    for (const [pairIndex, pairInfo] of allPairs) {
-      if (pairInfo.from === 'BTC' && pairInfo.to === 'USD') {
-        const pairData = await traderClient.pairsCache.getPairBackend(pairIndex);
-        btcFeedId = pairData.pair.feed.feedId;
-        console.log(`✅ Found BTC/USD feed ID: ${btcFeedId}\n`);
-        break;
-      }
-    }
+const ws = new WebSocket(PYTH_WS_URL);
 
-    if (!btcFeedId) {
-      throw new Error('Could not find BTC/USD feed ID');
-    }
+ws.on('open', () => {
+  console.log('✅ WebSocket connected\n');
+  
+  // Test 1: Subscribe with original case
+  console.log('📤 Subscribing with ORIGINAL case (0x prefix)...');
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    ids: [BTC_FEED_ID]
+  }));
+});
 
-    // Test FeedClient
-    console.log('2️⃣ Connecting to Pyth WebSocket...');
-    const feedClient = new FeedClient(
-      PYTH_WS_URL,
-      (error) => {
-        console.error('❌ FeedClient error:', error);
-      },
-      () => {
-        console.log('⚠️ FeedClient connection closed');
-      }
-    );
-
-    await feedClient.listenForPriceUpdates();
-    console.log('✅ Connected to Pyth\n');
-
-    // Register callback
-    console.log('3️⃣ Registering callback for BTC/USD...');
-    let updateCount = 0;
-    
-    feedClient.registerPriceFeedCallback(btcFeedId, (priceFeed: any) => {
-      updateCount++;
-      const price = Number(priceFeed.price.price) * Math.pow(10, priceFeed.price.expo);
-      console.log(`📊 Update ${updateCount}: BTC/USD = $${price.toFixed(2)}`);
-      
-      if (updateCount >= 3) {
-        console.log('\n✅ SUCCESS! Received 3 price updates');
-        process.exit(0);
-      }
-    });
-
-    console.log('✅ Callback registered. Waiting for price updates...\n');
-
-    // Timeout after 15 seconds
-    setTimeout(() => {
-      if (updateCount === 0) {
-        console.error('❌ FAILED: No price updates received after 15 seconds');
-        console.log('\nPossible issues:');
-        console.log('- Pyth WebSocket URL might be incorrect');
-        console.log('- Feed ID might be wrong');
-        console.log('- FeedClient might not be properly triggering callbacks');
-        process.exit(1);
-      }
-    }, 15000);
-
-  } catch (error) {
-    console.error('❌ Test failed:', error);
-    process.exit(1);
+ws.on('message', (data) => {
+  const message = JSON.parse(data.toString());
+  
+  console.log('\n📨 Received message:');
+  console.log('Type:', message.type);
+  
+  if (message.type === 'response') {
+    console.log('Full response:', JSON.stringify(message, null, 2));
   }
-}
+  
+  if (message.type === 'price_update') {
+    console.log('✅ PRICE UPDATE RECEIVED!');
+    console.log('Feed ID from Pyth:', message.price_feed.id);
+    console.log('Our Feed ID:', BTC_FEED_ID);
+    console.log('Match (exact):', message.price_feed.id === BTC_FEED_ID);
+    console.log('Match (lowercase):', message.price_feed.id.toLowerCase() === BTC_FEED_ID.toLowerCase());
+    
+    const price = Number(message.price_feed.price.price) * Math.pow(10, message.price_feed.price.expo);
+    console.log('Price:', price.toFixed(2));
+    
+    // Success - we got a price update
+    console.log('\n🎉 SUCCESS! WebSocket is working!');
+    process.exit(0);
+  }
+});
 
-testFeedClient();
+ws.on('error', (error) => {
+  console.error('❌ WebSocket error:', error);
+  process.exit(1);
+});
+
+ws.on('close', () => {
+  console.log('\n⚠️ WebSocket closed');
+});
+
+// Timeout after 20 seconds
+setTimeout(() => {
+  console.error('\n❌ TIMEOUT: No price updates received in 20 seconds');
+  console.log('\nThis suggests either:');
+  console.log('1. Pyth is not sending updates for this feed ID');
+  console.log('2. The subscription is not being accepted');
+  console.log('3. The feed ID format is incorrect');
+  ws.close();
+  process.exit(1);
+}, 20000);
