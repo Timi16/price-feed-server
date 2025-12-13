@@ -6,7 +6,7 @@
 import { FeedClient } from '@perpsdk/feed/feed_client';
 import { TraderClient } from '@perpsdk/client';
 
-const PYTH_WS_URL = 'https://hermes.pyth.network/ws';
+const PYTH_WS_URL = 'wss://hermes.pyth.network/ws';  // ← CHANGE https → wss
 const BASE_RPC_URL = 'https://base.meowrpc.com';
 
 async function testFeedClient() {
