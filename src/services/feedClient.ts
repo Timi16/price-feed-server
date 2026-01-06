@@ -1,5 +1,9 @@
 /**
- * FeedClient Service - Uses local PerpSdk with TypeScript path mapping
+ * FeedClient Service - FIXED VERSION
+ * Key fixes:
+ * 1. Normalize feed IDs (remove 0x prefix) before passing to FeedClient
+ * 2. Add detailed logging to track subscription flow
+ * 3. Ensure callbacks are properly triggered
  */
 
 import { FeedClient } from '@perpsdk/feed/feed_client';
@@ -10,6 +14,17 @@ import { PriceData } from '../types';
 import { calculatePythPrice } from '../utils/priceFormatter';
 
 export type PriceUpdateCallback = (priceData: PriceData) => void;
+
+/**
+ * Normalize feed ID: remove 0x prefix and lowercase
+ */
+function normalizeFeedId(feedId: string): string {
+  let normalized = feedId.toLowerCase();
+  if (normalized.startsWith('0x')) {
+    normalized = normalized.slice(2);
+  }
+  return normalized;
+}
 
 class PriceFeedService {
   private feedClient: FeedClient | null = null;
@@ -27,7 +42,7 @@ class PriceFeedService {
       logger.info('Initializing FeedClient from local PerpSdk...');
 
       this.feedClient = new FeedClient(
-        CONFIG.PYTH.WS_URL, // already wss://hermes.pyth.network/ws
+        CONFIG.PYTH.WS_URL,
         (error) => {
           logger.error('FeedClient error:', error);
           this.connected = false;
@@ -43,7 +58,7 @@ class PriceFeedService {
       await this.feedClient.listenForPriceUpdates();
 
       this.connected = true;
-      logger.info('Connected to Pyth WebSocket');
+      logger.info('✅ Connected to Pyth WebSocket');
     } catch (error) {
       logger.error('Failed to connect to Pyth WebSocket:', error);
       throw error;
@@ -55,12 +70,17 @@ class PriceFeedService {
       throw new Error('FeedClient not connected');
     }
 
-    const feedId = pairService.getFeedId(pair);
+    let feedId = pairService.getFeedId(pair);
     if (!feedId) {
       throw new Error(`Unsupported pair: ${pair}`);
     }
 
-    logger.info(`Subscribing to ${pair} (feedId: ${feedId})`);
+    // ⭐ CRITICAL: Normalize feed ID (remove 0x prefix)
+    const normalizedFeedId = normalizeFeedId(feedId);
+
+    logger.info(`📊 Subscribing to ${pair}`);
+    logger.info(`   Original feedId: ${feedId}`);
+    logger.info(`   Normalized feedId: ${normalizedFeedId}`);
 
     if (!this.subscriptions.has(pair)) {
       this.subscriptions.set(pair, new Set());
@@ -70,9 +90,10 @@ class PriceFeedService {
     let pythCallback = this.callbacks.get(pair);
 
     if (!pythCallback) {
+      logger.info(`   Creating new Pyth callback for ${pair}`);
+      
       pythCallback = (priceFeed: any) => {
         try {
-          // CRITICAL FIX: Pyth uses snake_case → publish_time
           const price = calculatePythPrice(priceFeed.price.price, priceFeed.price.expo);
           const confidence = calculatePythPrice(priceFeed.price.conf, priceFeed.price.expo);
 
@@ -81,13 +102,14 @@ class PriceFeedService {
             price,
             confidence,
             expo: priceFeed.price.expo,
-            publishTime: priceFeed.price.publish_time, // ← FIXED: was publishTime
+            publishTime: priceFeed.price.publish_time,
           };
 
-          logger.info(`Price update: ${pair} = $${price.toFixed(2)} ±$${confidence.toFixed(4)} @ ${new Date(priceFeed.price.publish_time * 1000).toISOString()}`);
+          logger.info(`💰 Price update: ${pair} = $${price.toFixed(2)} ±$${confidence.toFixed(4)}`);
 
           const subs = this.subscriptions.get(pair);
-          if (subs) {
+          if (subs && subs.size > 0) {
+            logger.debug(`   Broadcasting to ${subs.size} subscriber(s)`);
             subs.forEach((cb) => {
               try {
                 cb(priceData);
@@ -95,6 +117,8 @@ class PriceFeedService {
                 logger.error(`Error in subscriber callback for ${pair}:`, err);
               }
             });
+          } else {
+            logger.warn(`   No subscribers found for ${pair}!`);
           }
         } catch (error) {
           logger.error(`Error processing price update for ${pair}:`, error);
@@ -102,23 +126,30 @@ class PriceFeedService {
       };
 
       this.callbacks.set(pair, pythCallback);
-      logger.info(`Registering Pyth callback for feedId: ${feedId}`);
-      this.feedClient!.registerPriceFeedCallback(feedId.toLowerCase(), pythCallback); // ← lowercase!
+      
+      // ⭐ CRITICAL: Pass normalized feed ID to FeedClient
+      logger.info(`   Registering with FeedClient using: ${normalizedFeedId}`);
+      this.feedClient!.registerPriceFeedCallback(normalizedFeedId, pythCallback);
+    } else {
+      logger.info(`   Using existing Pyth callback for ${pair}`);
     }
 
-    logger.info(`Subscribed to ${pair} (total: ${this.subscriptions.get(pair)?.size})`);
+    logger.info(`✅ Subscribed to ${pair} (total subscribers: ${this.subscriptions.get(pair)?.size})`);
 
+    // Return unsubscribe function
     return () => {
       const subs = this.subscriptions.get(pair);
       if (subs) {
         subs.delete(callback);
+        logger.info(`Unsubscribing client from ${pair} (${subs.size} remaining)`);
+        
         if (subs.size === 0) {
           this.subscriptions.delete(pair);
           const cb = this.callbacks.get(pair);
           if (cb && this.feedClient) {
-            this.feedClient.unregisterPriceFeedCallback(feedId.toLowerCase(), cb);
+            logger.info(`No more subscribers for ${pair}, unregistering from Pyth`);
+            this.feedClient.unregisterPriceFeedCallback(normalizedFeedId, cb);
             this.callbacks.delete(pair);
-            logger.info(`Unsubscribed from ${pair} (no more clients)`);
           }
         }
       }
@@ -147,7 +178,7 @@ class PriceFeedService {
       price,
       confidence,
       expo: priceFeed.price.expo,
-      publishTime: priceFeed.price.publish_time, // ← FIXED
+      publishTime: priceFeed.price.publish_time,
     };
   }
 

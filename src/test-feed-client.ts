@@ -1,73 +1,192 @@
 /**
- * WebSocket Debug Test - Direct Pyth Connection
- * This will show us EXACTLY what Pyth is sending
- * Run: npx tsx ws-debug-test.ts
+ * Full System Diagnostic
+ * This will test the ENTIRE flow from Pyth → FeedClient → PriceFeedService → WebSocket
+ * Run: npx tsx full-diagnostic.ts
  */
 
-import WebSocket from 'ws';
+import { FeedClient } from '@perpsdk/feed/feed_client';
+import { TraderClient } from '@perpsdk/client';
 
 const PYTH_WS_URL = 'wss://hermes.pyth.network/ws';
-const BTC_FEED_ID = '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43';
+const BASE_RPC_URL = 'https://base-rpc.publicnode.com';
 
-console.log('🔍 Direct Pyth WebSocket Debug Test\n');
-console.log(`Feed ID: ${BTC_FEED_ID}`);
-console.log(`Lowercase: ${BTC_FEED_ID.toLowerCase()}\n`);
+async function runDiagnostic() {
+  console.log('🔍 FULL SYSTEM DIAGNOSTIC\n');
+  console.log('═'.repeat(60));
 
-const ws = new WebSocket(PYTH_WS_URL);
-
-ws.on('open', () => {
-  console.log('✅ WebSocket connected\n');
-  
-  // Test 1: Subscribe with original case
-  console.log('📤 Subscribing with ORIGINAL case (0x prefix)...');
-  ws.send(JSON.stringify({
-    type: 'subscribe',
-    ids: [BTC_FEED_ID]
-  }));
-});
-
-ws.on('message', (data) => {
-  const message = JSON.parse(data.toString());
-  
-  console.log('\n📨 Received message:');
-  console.log('Type:', message.type);
-  
-  if (message.type === 'response') {
-    console.log('Full response:', JSON.stringify(message, null, 2));
-  }
-  
-  if (message.type === 'price_update') {
-    console.log('✅ PRICE UPDATE RECEIVED!');
-    console.log('Feed ID from Pyth:', message.price_feed.id);
-    console.log('Our Feed ID:', BTC_FEED_ID);
-    console.log('Match (exact):', message.price_feed.id === BTC_FEED_ID);
-    console.log('Match (lowercase):', message.price_feed.id.toLowerCase() === BTC_FEED_ID.toLowerCase());
+  try {
+    // Step 1: Get BTC feed ID from Avantis
+    console.log('\n📋 STEP 1: Getting BTC/USD feed ID from Avantis...');
+    const traderClient = new TraderClient(BASE_RPC_URL);
+    const allPairs = await traderClient.pairsCache.getPairsInfo();
     
-    const price = Number(message.price_feed.price.price) * Math.pow(10, message.price_feed.price.expo);
-    console.log('Price:', price.toFixed(2));
+    let btcFeedId: string | null = null;
+    for (const [pairIndex, pairInfo] of allPairs) {
+      if (pairInfo.from === 'BTC' && pairInfo.to === 'USD') {
+        const pairData = await traderClient.pairsCache.getPairBackend(pairIndex);
+        btcFeedId = pairData.pair.feed.feedId;
+        break;
+      }
+    }
+
+    if (!btcFeedId) throw new Error('Could not find BTC/USD feed ID');
     
-    // Success - we got a price update
-    console.log('\n🎉 SUCCESS! WebSocket is working!');
-    process.exit(0);
+    console.log(`✅ Original feed ID: ${btcFeedId}`);
+    
+    // Normalize it
+    let normalizedFeedId = btcFeedId.toLowerCase();
+    if (normalizedFeedId.startsWith('0x')) {
+      normalizedFeedId = normalizedFeedId.slice(2);
+    }
+    console.log(`✅ Normalized feed ID: ${normalizedFeedId}`);
+
+    // Step 2: Test direct Pyth connection
+    console.log('\n📋 STEP 2: Testing direct Pyth WebSocket...');
+    const directWs = new WebSocket(PYTH_WS_URL);
+    
+    const directPythTest = await new Promise<boolean>((resolve) => {
+      let gotUpdate = false;
+      
+      directWs.onopen = () => {
+        console.log('✅ Connected to Pyth directly');
+        console.log(`📤 Subscribing to: ${normalizedFeedId}`);
+        directWs.send(JSON.stringify({
+          type: 'subscribe',
+          ids: [normalizedFeedId]
+        }));
+      };
+
+      directWs.onmessage = (event: any) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'price_update') {
+          console.log(`✅ Received price update from Pyth`);
+          console.log(`   Feed ID: ${msg.price_feed.id}`);
+          console.log(`   Matches normalized? ${msg.price_feed.id === normalizedFeedId}`);
+          gotUpdate = true;
+          directWs.close();
+          resolve(true);
+        }
+      };
+
+      setTimeout(() => {
+        if (!gotUpdate) {
+          console.error('❌ No price update from Pyth');
+          directWs.close();
+          resolve(false);
+        }
+      }, 10000);
+    });
+
+    if (!directPythTest) {
+      console.error('❌ Direct Pyth test failed');
+      return;
+    }
+
+    // Step 3: Test FeedClient
+    console.log('\n📋 STEP 3: Testing FeedClient wrapper...');
+    const feedClient = new FeedClient(PYTH_WS_URL);
+    await feedClient.listenForPriceUpdates();
+    console.log('✅ FeedClient connected');
+
+    const feedClientTest = await new Promise<boolean>((resolve) => {
+      let gotCallback = false;
+
+      console.log(`📤 Registering callback for: ${normalizedFeedId}`);
+      feedClient.registerPriceFeedCallback(normalizedFeedId, (priceFeed: any) => {
+        console.log(`✅ FeedClient callback triggered!`);
+        console.log(`   Feed ID: ${priceFeed.id}`);
+        console.log(`   Price: ${Number(priceFeed.price.price) * Math.pow(10, priceFeed.price.expo)}`);
+        gotCallback = true;
+        feedClient.close();
+        resolve(true);
+      });
+
+      setTimeout(() => {
+        if (!gotCallback) {
+          console.error('❌ FeedClient callback never triggered');
+          feedClient.close();
+          resolve(false);
+        }
+      }, 10000);
+    });
+
+    if (!feedClientTest) {
+      console.error('❌ FeedClient test failed');
+      return;
+    }
+
+    // Step 4: Test WebSocket server
+    console.log('\n📋 STEP 4: Testing WebSocket server endpoint...');
+    const ws = new WebSocket('ws://localhost:3001/prices');
+    
+    const wsServerTest = await new Promise<boolean>((resolve) => {
+      let gotPriceUpdate = false;
+
+      ws.onopen = () => {
+        console.log('✅ Connected to price-feed-server WebSocket');
+      };
+
+      ws.onmessage = (event: any) => {
+        const data = JSON.parse(event.data);
+        console.log(`📨 Received: ${data.type}`);
+
+        if (data.type === 'connected') {
+          console.log('📤 Subscribing to BTC/USD...');
+          ws.send(JSON.stringify({
+            type: 'subscribe',
+            pair: 'BTC/USD'
+          }));
+        }
+
+        if (data.type === 'subscribed') {
+          console.log('✅ Subscription confirmed');
+        }
+
+        if (data.type === 'price_update') {
+          console.log('✅ Price update received!');
+          console.log(`   Pair: ${data.pair}`);
+          console.log(`   Price: $${data.data.price.toFixed(2)}`);
+          gotPriceUpdate = true;
+          ws.close();
+          resolve(true);
+        }
+      };
+
+      ws.onerror = (error: any) => {
+        console.error('❌ WebSocket error:', error.message);
+        resolve(false);
+      };
+
+      setTimeout(() => {
+        if (!gotPriceUpdate) {
+          console.error('❌ No price updates from WebSocket server');
+          ws.close();
+          resolve(false);
+        }
+      }, 15000);
+    });
+
+    // Final results
+    console.log('\n═'.repeat(60));
+    console.log('📊 DIAGNOSTIC RESULTS:');
+    console.log('═'.repeat(60));
+    console.log(`Direct Pyth:           ${directPythTest ? '✅' : '❌'}`);
+    console.log(`FeedClient:            ${feedClientTest ? '✅' : '❌'}`);
+    console.log(`WebSocket Server:      ${wsServerTest ? '✅' : '❌'}`);
+    console.log('═'.repeat(60));
+
+    if (directPythTest && feedClientTest && wsServerTest) {
+      console.log('\n🎉 ALL TESTS PASSED! System is working correctly!');
+    } else {
+      console.log('\n⚠️ Some tests failed. Check the logs above.');
+    }
+
+    process.exit(wsServerTest ? 0 : 1);
+
+  } catch (error) {
+    console.error('\n❌ Diagnostic failed:', error);
+    process.exit(1);
   }
-});
+}
 
-ws.on('error', (error) => {
-  console.error('❌ WebSocket error:', error);
-  process.exit(1);
-});
-
-ws.on('close', () => {
-  console.log('\n⚠️ WebSocket closed');
-});
-
-// Timeout after 20 seconds
-setTimeout(() => {
-  console.error('\n❌ TIMEOUT: No price updates received in 20 seconds');
-  console.log('\nThis suggests either:');
-  console.log('1. Pyth is not sending updates for this feed ID');
-  console.log('2. The subscription is not being accepted');
-  console.log('3. The feed ID format is incorrect');
-  ws.close();
-  process.exit(1);
-}, 20000);
+runDiagnostic();
