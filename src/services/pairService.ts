@@ -3,7 +3,7 @@
  */
 
 // ✅ Use path alias instead of relative import
-import { TraderClient } from '@perpsdk/client';
+import { TraderClient } from 'perps-sdk-ts/dist/client';
 import { CONFIG } from '../config';
 import { logger } from '../utils/logger';
 import { PythFeedMapping } from '../types';
