@@ -4,8 +4,8 @@
  * Run: npx tsx full-diagnostic.ts
  */
 
-import { FeedClient } from '@perpsdk/feed/feed_client';
-import { TraderClient } from '@perpsdk/client';
+import { FeedClient, TraderClient } from 'perps-sdk-ts';
+// import { TraderClient } from '@perpsdk/client';
 
 const PYTH_WS_URL = 'wss://hermes.pyth.network/ws';
 const BASE_RPC_URL = 'https://base-rpc.publicnode.com';
