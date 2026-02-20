@@ -302,7 +302,25 @@ export class TraderClient {
    * @param tx - Transaction to sign
    * @returns Transaction receipt
    */
-  async signAndGetReceipt(tx: TransactionRequest): Promise<TransactionReceipt | null> {
+  async signAndGetReceipt(tx: TransactionRequest, simulate =false): Promise<TransactionReceipt | null> {
+    if (!this.signer) {
+      throw new Error('Signer not set');
+    }
+
+    await this.validateTransactionRequest(tx);
+
+
+    // Sign the transaction
+    const signedTx = await this.signer.signTransaction(tx);
+
+    // Send the transaction
+    const txResponse = await this.provider.broadcastTransaction(signedTx);
+
+    // Wait for confirmation
+    return await txResponse.wait();
+  }
+
+async validateTransactionRequest(tx: TransactionRequest): Promise<void> {
     if (!this.signer) {
       throw new Error('Signer not set');
     }
@@ -333,17 +351,18 @@ export class TraderClient {
         tx.gasPrice = feeData.gasPrice || undefined;
       }
     }
-
-    // Sign the transaction
-    const signedTx = await this.signer.signTransaction(tx);
-
-    // Send the transaction
-    const txResponse = await this.provider.broadcastTransaction(signedTx);
-
-    // Wait for confirmation
-    return await txResponse.wait();
   }
 
+  async simulateTransaction(tx: TransactionRequest): Promise<bigint> {
+    await this.validateTransactionRequest(tx);
+
+    try {
+     return await this.provider.estimateGas(tx);
+    } catch (error: any) {
+      console.error('Transaction simulation failed:', error);
+      throw new Error(`Transaction simulation failed: ${error.message}`);
+    }
+  }
   /**
    * Estimate gas for a transaction
    * @param tx - Transaction to estimate

@@ -7,7 +7,7 @@ import { TraderClient, fromBlockchain10, fromBlockchain12 } from '../src';
 
 async function main() {
   // Initialize client
-  const client = new TraderClient('https://mainnet.base.org');
+  const client = new TraderClient('https://base.meowrpc.com');
 
   console.log('=== OPTIMIZED SNAPSHOT DEMO ===\n');
 

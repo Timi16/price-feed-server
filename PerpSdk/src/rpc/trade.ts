@@ -181,8 +181,8 @@ console.log("execution fee (wei)", value);
       data: this.tradingContract.interface.encodeFunctionData('updateMargin', [
         pairIndex,
         tradeIndex,
-        toBlockchain6(marginDelta),
         isDeposit,
+        toBlockchain6(marginDelta),
       ]),
     };
   }

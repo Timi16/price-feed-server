@@ -51,6 +51,7 @@ export const TradeInputSchema = z.object({
   referrer: addressSchema.optional().default('0x0000000000000000000000000000000000000000'),
   orderType: z.nativeEnum(TradeInputOrderType),
   maxSlippageP: z.number(),
+  timestamp: z.number(),
 });
 
 // TradeResponse schema
