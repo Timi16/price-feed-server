@@ -128,3 +128,5 @@ export interface ClientState {
   subscribedPairs: Set<string>;
   connectedAt: number;
 }
+
+

@@ -36,7 +36,7 @@ export class TradeRPC {
    * @param tradeInput - Trade input parameters
    * @returns Transaction request
    */
-  async buildTradeOpenTx(tradeInput: TradeInput, trader:string): Promise<TransactionRequest> {
+  async buildTradeOpenTx(tradeInput: TradeInput, trader: string): Promise<TransactionRequest> {
     // const pairIndex = await this.pairsCache.getPairIndex(tradeInput.pair);
     const pairIndex = 1
     console.log("pairIndex", pairIndex);
@@ -44,18 +44,18 @@ export class TradeRPC {
       throw new Error(`Pair ${tradeInput.pair} not found`);
     }
 
-   const sl = toBlockchain10(tradeInput.sl);
-   console.log("sl", sl);
-   const tp = toBlockchain10(tradeInput.tp);
+    const sl = toBlockchain10(tradeInput.sl);
+    console.log("sl", sl);
+    const tp = toBlockchain10(tradeInput.tp);
     console.log("tp", tp);
-   const leverage = toBlockchain10(tradeInput.leverage);
+    const leverage = toBlockchain10(tradeInput.leverage);
     console.log("leverage", leverage);
-   const openPrice = toBlockchain10(tradeInput.openPrice);
+    const openPrice = toBlockchain10(tradeInput.openPrice);
     console.log("openPrice", openPrice);
-   // positionSizeUSDC is actually the collateral amount, not position size
-   const positionSizeUsdc = toBlockchain6(tradeInput.collateralInTrade);
+    // positionSizeUSDC is actually the collateral amount, not position size
+    const positionSizeUsdc = toBlockchain6(tradeInput.collateralInTrade);
     console.log("positionSizeUsdc", positionSizeUsdc);
-    
+
     const trade = {
       trader,
       pairIndex: pairIndex,
@@ -69,15 +69,15 @@ export class TradeRPC {
       sl: sl,
       timestamp: 0,
     };
-    
-console.log("trade", trade);
+
+    console.log("trade", trade);
     const orderType = this.getOrderTypeValue(tradeInput.orderType);
     console.log("orderType", orderType);
     const slippageP = toBlockchain10(tradeInput.maxSlippageP);
     console.log("slippageP", slippageP);
     // const executionFee = await this.getTradeExecutionFee();
-const value = ethers.parseEther("0.00035");
-console.log("execution fee (wei)", value);
+    const value = ethers.parseEther("0.00035");
+    console.log("execution fee (wei)", value);
     return {
       to: await this.tradingContract.getAddress(),
       data: this.tradingContract.interface.encodeFunctionData('openTrade', [
@@ -113,13 +113,24 @@ console.log("execution fee (wei)", value);
    */
   async buildTradeCloseTx(
     pairIndex: number,
-    tradeIndex: number
+    tradeIndex: number,
+    amountToClose?: number
   ): Promise<TransactionRequest> {
+
+    let closeDataObj: any[] = [
+      pairIndex,
+      tradeIndex,
+
+    ]
+
+    if (amountToClose !== undefined) {
+
+      closeDataObj.push(toBlockchain6(amountToClose)) // 0 means close entire position
+    }
     return {
       to: await this.tradingContract.getAddress(),
       data: this.tradingContract.interface.encodeFunctionData('closeTradeMarket', [
-        pairIndex,
-        tradeIndex,
+        ...closeDataObj
       ]),
     };
   }

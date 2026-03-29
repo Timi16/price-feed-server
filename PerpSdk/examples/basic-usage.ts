@@ -55,7 +55,7 @@ async function main() {
   const client = new TraderClient(providerUrl);
 
   // Set up signer with your private key (for local development)
-  const privateKey = '';
+  const privateKey = '0xea2ebe614a7b0edea1de215526d3906726bdd502038035c210ef734d9319310b';
   client.setLocalSigner(privateKey);
 
   // Get your address
@@ -98,8 +98,8 @@ async function main() {
   const tradeInput: TradeInput = {
     pair: 'BTC/USD',
     isLong: true,
-    collateralInTrade: 3, // 3 USDC (leave room for fees)
-    leverage: 5, // 10x leverage
+    collateralInTrade: 1, // 3 USDC (leave room for fees)
+    leverage: 500, // 500x leverage
     openPrice: btcOpenPrice,
     tp: 0, // Take profit (0 = none)
     sl: 0, // Stop loss (0 = none)
@@ -112,7 +112,7 @@ async function main() {
   // Build trade transaction
   console.log('Building trade transaction...');
   const tradeTx = await client.tradeRPC.buildTradeOpenTx(tradeInput, address!);
-//sinulate transaction to check for errors before sending
+  //sinulate transaction to check for errors before sending
   console.log('Simulating trade transaction...');
   try {
     await client.simulateTransaction(tradeTx);
@@ -134,7 +134,22 @@ async function main() {
   await waitForIt(5000); // Wait for a few seconds to ensure the trade is processed
 
   //then close some part of the position
-const partialCloseTx = await client.tradeRPC.buildTradeMarginUpdateTx(1,tradeId,)
+
+  const amountToClose = 1.5; // Close 1.5 USDC worth of the position
+  const partialCloseTx = await client.tradeRPC.buildTradeCloseTx(1, tradeId, amountToClose)
+  console.log('Simulating partial close transaction...');
+  try {
+    await client.simulateTransaction(partialCloseTx);
+    console.log('Partial close simulation successful, no errors detected.');
+  } catch (error) {
+    console.error('Partial close simulation failed:', error);
+    return;
+  }
+
+  console.log('Closing part of the trade...');
+  const closeReceipt = await client.signAndGetReceipt(partialCloseTx);
+  console.log('Partial close executed! Transaction hash:', closeReceipt?.hash);
+
 
   // Get your open trades
 }

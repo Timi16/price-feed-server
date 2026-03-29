@@ -10,8 +10,11 @@
     "clean": "rm -rf dist",
     "prepare": "npm run build",
     "prod": "npx pm2 start dist/index.js --name debonk-price-feed-server",
+    "restart": "npx pm2 restart debonk-price-feed-server --update-env",
     "delete": "npx pm2 delete debonk-price-feed-server",
-    "logs": "npx pm2 logs debonk-price-feed-server"
+    "logs": "npx pm2 logs debonk-price-feed-server",
+    "ch": "git pull && yarn install && yarn build && (yarn run restart || yarn run prod)",
+    "chl": "yarn run ch && yarn run logs"
   },
   "dependencies": {
     "cors": "^2.8.5",
