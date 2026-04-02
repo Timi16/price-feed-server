@@ -4,8 +4,9 @@
   "description": "Real-time crypto price feed server using Avantis SDK",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "dev": "yarn build:perps && tsx watch src/index.ts",
+    "build:perps": "tsc -p PerpSdk/tsconfig.json",
+    "build": "yarn build:perps && tsc",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "prepare": "npm run build",
@@ -21,7 +22,7 @@
     "dotenv": "^16.3.1",
     "ethers": "^6.9.0",
     "express": "^4.18.2",
-    "perps-sdk-ts": "file:PerpSdk",
+    "perps-sdk-ts": "portal:PerpSdk",
     "ws": "^8.14.2",
     "zod": "^3.22.4"
   },

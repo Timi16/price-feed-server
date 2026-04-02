@@ -5,7 +5,7 @@
  * 2. Add detailed logging to track subscription flow
  * 3. Ensure callbacks are properly triggered
  */
-import { FeedClient } from 'perps-sdk-ts/dist/feed/feed_client';
+import { FeedClient } from 'perps-sdk-ts';
 import { CONFIG } from '../config';
 import { logger } from '../utils/logger';
 import { pairService } from './pairService';

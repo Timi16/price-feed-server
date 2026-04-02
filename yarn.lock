@@ -1638,7 +1638,7 @@ __metadata:
     dotenv: "npm:^16.3.1"
     ethers: "npm:^6.9.0"
     express: "npm:^4.18.2"
-    perps-sdk-ts: "file:PerpSdk"
+    perps-sdk-ts: "portal:PerpSdk"
     tsx: "npm:^4.6.2"
     typescript: "npm:^5.2.2"
     ws: "npm:^8.14.2"
@@ -2478,17 +2478,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"perps-sdk-ts@file:PerpSdk::locator=debonk-price-feed-server%40workspace%3A.":
-  version: 1.0.1
-  resolution: "perps-sdk-ts@file:PerpSdk#PerpSdk::hash=9bdd05&locator=debonk-price-feed-server%40workspace%3A."
+"perps-sdk-ts@portal:PerpSdk::locator=debonk-price-feed-server%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "perps-sdk-ts@portal:PerpSdk::locator=debonk-price-feed-server%40workspace%3A."
   dependencies:
     "@aws-sdk/client-kms": "npm:^3.700.0"
     ts-node: "npm:^10.9.2"
     ws: "npm:^8.18.0"
     zod: "npm:^3.23.0"
-  checksum: 04a0759204df90853b1eea23f1d2292960dae887cdc8eb94902a7916c6a1520612e27e1525abf2725d6ec32650a48acd70c320752f7f6be689204c362470f832
   languageName: node
-  linkType: hard
+  linkType: soft
 
 "picomatch@npm:^4.0.3":
   version: 4.0.4
